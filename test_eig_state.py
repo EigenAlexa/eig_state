@@ -1,6 +1,5 @@
 import unittest
-from eig_state import History, State
-from state_extractors import StateExtractor
+from eig_state import StateExtractor, State, History
 
 class TestHistory(unittest.TestCase):
 
@@ -61,8 +60,26 @@ class TestState(unittest.TestCase):
     def test_bad_history_input(self):
         test_text = "This is a test!"
         try:
-            test_state = State(None, test_text)
+            test_state = State(123, test_text)
             self.assertTrue(False)
         except Exception as e:
             self.assertIsInstance(e, ValueError)
 
+
+class TestStateExtractors(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(self):
+        self.extractors = [cls() for cls in StateExtractor.__subclasses__()]
+
+    def test_extractors_no_state_no_history(self):
+
+        for extractor in self.extractors:
+            for state, history, output in extractor.test_cases:
+                extractor(state, history)
+                for key, value in output.items():
+                    error_msg = 'for extractor {} with input "{}" and state var "{}"'
+                    error_msg = error_msg.format(extractor.__class__.__name__,
+                                                 state.q, key)
+                    self.assertEqual(state.__dict__[key], value,
+                                    msg=error_msg)
