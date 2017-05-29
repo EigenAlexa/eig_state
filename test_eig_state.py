@@ -1,7 +1,7 @@
 import unittest
-from eig_state import StateExtractor, State, History, ConvHistory, ConvState
-from eig_state import NamedEntityExtractor, StateManager, UserHistory
-from eig_state import UserNameExtractor, UserState
+from eig_state import State, History, ConvHistory, ConvState
+from eig_state import StateManager, UserState, UserHistory
+from state_extractors import StateExtractor, UserNameExtractor, NamedEntityExtractor
 from pymongo import MongoClient
 import utils
 
