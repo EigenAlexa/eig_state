@@ -2,6 +2,7 @@ import unittest
 from eig_state import State, History, ConvHistory, ConvState
 from eig_state import StateManager, UserState, UserHistory
 from state_extractors import StateExtractor, UserNameExtractor, NamedEntityExtractor
+from state_extractors import ProfanityDetector
 from pymongo import MongoClient
 import utils
 
@@ -112,6 +113,31 @@ class TestStateExtractors(unittest.TestCase):
                      ]
              }
             )
+        ]
+        self.conv_extractor_util(test_cases)
+
+    def test_ProfanityDetector(self):
+
+        history = ConvHistory()
+        exts = [ProfanityDetector()]
+
+        test_cases = [
+            (ConvState("Fuck you.", exts),
+             history,
+             {'has_swear': True}
+            ),
+            (ConvState("you are class", exts),
+             history,
+             {'has_swear': False}
+            ),
+            (ConvState("you are an ass.", exts),
+             history,
+             {'has_swear': True}
+            ),
+            (ConvState("fucker", exts),
+             history,
+             {'has_swear': True}
+            ),
         ]
         self.conv_extractor_util(test_cases)
 

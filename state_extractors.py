@@ -1,4 +1,7 @@
 import abc
+from swear_words import words as swears
+from swear_words import phrases
+import re
 
 
 class StateExtractor(metaclass=abc.ABCMeta):
@@ -75,4 +78,23 @@ class UserNameExtractor(StateExtractor):
             state.name = "UserName"
             return False
 
+class ProfanityDetector(StateExtractor):
+
+    @property
+    def type(self):
+        return "conv"
+
+    @property
+    def state_var_names(self):
+        return ['has_swear']
+
+    def __call__(self, state, history):
+        state.has_swear = self.contains_profanity(state.question)
+        return True
+
+    def contains_profanity(self, text):
+        words = re.split(";|,|\:|\.|\?|\-|\!| ", text)
+        has_swear = any(word.lower().startswith(swear) and word.lower().endswith(swear) for word in words for swear in swears)
+        has_bad_phrase = any(phrase in text for phrase in phrases)
+        return has_swear or has_bad_phrase
 
