@@ -1,4 +1,5 @@
 import abc
+import copy
 import inspect
 from pymongo import MongoClient
 
@@ -36,75 +37,92 @@ class StateExtractor(metaclass=abc.ABCMeta):
 
 class State:
 
-    def __init__(self, history=None, extractors=[], from_mongo=False, **kwargs):
+    def __init__(self, extractors=[], **kwargs):
 
-        if from_mongo:
-            for key, value in kwargs.items():
-                setattr(self, key, value)
-        else:
-            if isinstance(history, History):
-                if isinstance(extractors, list):
-                    for extractor in extractors:
-                        extractor(self, history)
-                elif isinstance(extractors, str):
-                    for extractor in StateExtractor.get_extractors(extractors):
-                        extractor(self, history)
-                else:
-                    raise TypeError("extractor must be either list of extractors, or a string extractor type.")
+        self.extractors = extractors
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
-                history.update(self)
+    def run_extractors(self, history, *args):
+        changed = False
+        if isinstance(history, History):
+            if isinstance(self.extractors, list):
+                for extractor in self.extractors:
+                    change = extractor(self, history, *args)
+                    changed = changed or change
+            elif isinstance(self.extractors, str):
+                for extractor in StateExtractor.get_extractors(self.extractors):
+                    change = extractor(self, history, *args)
+                    changed = changed or change
+            else:
+                raise TypeError("extractor must be either list of extractors, or a string extractor type.")
 
-            elif history is not None:
-                raise TypeError("history must be instance of History, not {}".format(type(history)))
+            self.changed = changed
+            if history.past_states:
+                if hasattr(self, 'question'):
+                    self.changed |= self.question != history.past_states[-1].question
+            else:
+                self.changed = True
+            history.update(self)
+
+        elif history is not None:
+            raise TypeError("history must be instance of History, not {}".format(type(history)))
 
     @classmethod
     def from_mongo(cls, obj):
         """
         Parses mongo data dict into State object
         """
-        return cls(from_mongo=True, **obj)
+        return cls(**obj)
+
+    def save(self, col):
+        """
+        Saves object to mongo
+        """
+        if hasattr(self, '_id'):
+            col.replace_one({'_id': self._id}, self.__dict__)
+        else:
+            result = col.insert_one(self.__dict__)
+            self._id = result.inserted_id
 
 class ConvState(State):
 
-    def __init__(self, question=None, history=None, extractors=None,
-                 from_mongo=False, **kwargs):
+    def __init__(self, question=None, extractors=None, **kwargs):
         self.question = question
         if isinstance(extractors, list):
-            super().__init__(history, extractors, from_mongo, **kwargs)
+            super().__init__(extractors, **kwargs)
         else:
-            super().__init__(history, "conv", from_mongo, **kwargs)
+            super().__init__("conv", **kwargs)
 
 class UserState(State):
-    pass
+
+    def __init__(self, extractors=None, **kwargs):
+        if isinstance(extractors, list):
+            super().__init__(extractors, **kwargs)
+        else:
+            super().__init__("user", **kwargs)
+
+    def run_extractors(self, user_hist, conv_hist):
+        super().run_extractors(user_hist, conv_hist)
 
 
 class History:
 
     def __init__(self, **kwargs):
-        self._state = None
+        self.state = None
         self.past_states = []
-        self._id = None
         for key, value in kwargs.items():
-            try:
-                if isinstance(value, list) and value and isinstance(value[0],
-                                                                    list):
-                    value = list(map(lambda x: tuple(x), value))
-                setattr(self, key, value)
-            except AttributeError:
-                if key == 'state':
-                    self._state = value
-    @property
-    def state(self):
-        return self._state
+            if isinstance(value, list) and value and isinstance(value[0], list):
+                value = list(map(lambda x: tuple(x), value))
+            setattr(self, key, value)
 
     def update(self, state):
         if isinstance(self.state, State):
-            self.past_states.append(self.state)
+            if state.changed:
+                self.past_states.append(self.state)
+                self.state = state
         else:
-            #TODO make it so it checks if it is a mongo id and then gets the
-            # state from mongo
-            pass
-        self._state = state
+            self.state = state
 
     @classmethod
     def from_mongo(cls, obj):
@@ -113,6 +131,24 @@ class History:
         """
         return cls(**obj)
 
+    def save(self, col, state_col):
+        """
+        Saves this to mongo
+        """
+        doc = copy.copy(self.__dict__)
+        if 'state' in doc and isinstance(doc['state'], State):
+            doc['state'].save(state_col)
+            doc['state'] = doc['state']._id
+        if 'past_states' in doc:
+            doc['past_states'] = copy.copy(doc['past_states'])
+            for i, state in enumerate(doc['past_states']):
+                doc['past_states'][i] = state._id
+
+        if hasattr(self, '_id'):
+            col.replace_one({'_id': self._id}, doc)
+        else:
+            result = col.insert_one(doc)
+            self._id = result.inserted_id
 
 class ConvHistory(History):
 
@@ -139,7 +175,9 @@ class ConvHistory(History):
 
 
 class UserHistory(History):
-    pass
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
 
 class NamedEntityExtractor(StateExtractor):
@@ -159,16 +197,42 @@ class NamedEntityExtractor(StateExtractor):
     def __call__(self, state, history):
         if history.past_states:
             state.nes = history.past_states[-1].nes
+            return True
         else:
             state.nes = {}
+            return False
 
+class UserNameExtractor(StateExtractor):
+
+    def __init__(self):
+        pass
+
+    @property
+    def type(self):
+        return "user"
+
+    @property
+    def state_var_names(self):
+        return ["name"]
+
+    def __call__(self, state, user_hist, conv_history):
+        if user_hist.past_states:
+            state.name = user_hist.past_states[-1].name
+            return True
+        else:
+            state.name = "UserName"
+            return False
 
 class StateManager:
 
-    def __init__(self, userid, convid):
+    def __init__(self, userid, convid, database='state_manager'):
         self.mongo_client = MongoClient(host='mongo', port=27017)
-        #conv_history = self.get_conv_history(convid)
-        #user = self.get_user(userid)
+        self.db = self.mongo_client[database]
+        self.conv_col = self.db.convs
+        self.state_col = self.db.states
+        self.user_col = self.db.users
+        self.conv_history = self.get_conv_history(convid)
+        self.user_history = self.get_user_history(userid)
 
     def get_conv_history(self, convid):
         """
@@ -179,29 +243,33 @@ class StateManager:
         if convid doesnt exist in mongo it should make a new doc in mongo and
         return new ConvHistory()
         """
-        conv_col = self.mongo_client.state_manager.convs
-        conv_obj = conv_col.find_one({'convid':convid})
-        print(conv_obj)
-        if conv_obj:
-            state = self.get_conv_state(conv_obj['state'])
-            conv_obj['state'] = state
-            conv_hist = ConvHistory.from_mongo(conv_obj)
+        return self.get_history('convid', convid, self.conv_col, ConvHistory,
+                                ConvState)
+
+    def get_user_history(self, userid):
+
+        return self.get_history('userid', userid, self.user_col, UserHistory,
+                                UserState)
+
+    def get_history(self, id_name, hist_id, col, cls, state_cls):
+
+        obj = col.find_one({id_name: hist_id})
+        if obj:
+            state = self.get_state(obj['state'], state_cls)
+            obj['state'] = state
+            for i, past_state_id in enumerate(obj['past_states']):
+                past_state = self.get_state(past_state_id, state_cls)
+                obj['past_states'][i] = past_state
+            hist = cls.from_mongo(obj)
         else:
             print("conv id not found, creating new doc")
-            conv_hist = ConvHistory()
-        return conv_hist
+            hist = cls()
+            hist.save(col, self.state_col)
+        return hist
 
-    def get_user(self, userid):
-        """
-        Get UserHistory object from mongodb
-        """
-        mongo_obj = None
-        return UserHistory().from_mongo(mongo_obj)
 
     def get_state(self, _id, cls):
-        print(_id)
-        state_col = self.mongo_client.state_manager.states
-        state_obj = state_col.find_one(_id)
+        state_obj = self.state_col.find_one(_id)
         if state_obj:
             return cls.from_mongo(state_obj)
         raise ValueError("State id doesn't exist in mongodb")
@@ -211,3 +279,9 @@ class StateManager:
 
     def get_user_state(self, _id):
         return self.get_state(_id, UserState)
+
+    def next_round(self, question):
+        state = ConvState(question)
+        state.run_extractors(self.conv_history)
+        self.conv_history.save(self.conv_col, self.state_col)
+        return self.conv_history
