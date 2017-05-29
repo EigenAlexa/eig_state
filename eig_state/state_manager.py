@@ -66,7 +66,7 @@ class StateManager:
         conv_state = state.ConvState(question)
         user_state = self.user_history.state
         if not user_state:
-            user_state = UserState()
+            user_state = state.UserState()
         conv_state.run_extractors(self.conv_history)
         user_state.run_extractors(self.user_history, self.conv_history)
         self.has_response = False
