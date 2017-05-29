@@ -13,7 +13,7 @@ from pymongo import MongoClient
 class TestConvHistory(unittest.TestCase):
 
     def setUp(self):
-        self.history = h.ConvHistory()
+        self.history = h.ConvHistory("")
 
     def tearDown(self):
         del self.history
@@ -50,7 +50,7 @@ class TestConvHistory(unittest.TestCase):
 class TestConvState(unittest.TestCase):
 
     def setUp(self):
-        self.history = h.ConvHistory()
+        self.history = h.ConvHistory("")
 
     def test_runs_conv_extractors(self):
         test_text = "This is a test!"
@@ -60,7 +60,7 @@ class TestConvState(unittest.TestCase):
 
     def test_runs_user_extractors(self):
         test_state = s.UserState()
-        test_state.run_extractors(h.UserHistory(), self.history)
+        test_state.run_extractors(h.UserHistory(""), self.history)
         utils.test_runs_user_extractors(self, test_state)
 
     def test_updates_history(self):
@@ -94,7 +94,7 @@ class TestStateExtractors(unittest.TestCase):
     @unittest.skip("Not Implemented")
     def test_NamedEntityExtractor(self):
 
-        history = h.ConvHistory()
+        history = h.ConvHistory("")
         exts = [se.NamedEntityExtractor()]
 
         test_cases = [
@@ -121,7 +121,7 @@ class TestStateExtractors(unittest.TestCase):
 
     def test_ProfanityDetector(self):
 
-        history = h.ConvHistory()
+        history = h.ConvHistory("")
         exts = [se.ProfanityDetector()]
 
         test_cases = [
@@ -146,7 +146,7 @@ class TestStateExtractors(unittest.TestCase):
 
     def test_AdviceDetector(self):
 
-        history = h.ConvHistory()
+        history = h.ConvHistory("")
         exts = [se.AdviceDetector()]
 
         test_cases = [
@@ -170,8 +170,8 @@ class TestStateExtractors(unittest.TestCase):
     @unittest.skip("Not Implemented")
     def test_UserNameExtractor(self):
 
-        user_hist = h.UserHistory()
-        conv_hist = h.ConvHistory()
+        user_hist = h.UserHistory("")
+        conv_hist = h.ConvHistory("")
         user_exts = [se.UserNameExtractor()]
         conv_exts = []
 

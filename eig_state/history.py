@@ -50,7 +50,8 @@ class History:
 
 class ConvHistory(History):
 
-    def __init__(self, **kwargs):
+    def __init__(self, convid, **kwargs):
+        self.convid = convid
         self.last_response = None
         self.last_question = None
         self.past_turns = []
@@ -74,7 +75,8 @@ class ConvHistory(History):
 
 class UserHistory(History):
 
-    def __init__(self, **kwargs):
+    def __init__(self, userid, **kwargs):
+        self.userid = userid
         super().__init__(**kwargs)
 
 

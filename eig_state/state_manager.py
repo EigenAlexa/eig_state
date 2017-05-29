@@ -43,7 +43,7 @@ class StateManager:
             hist = cls.from_mongo(obj)
         else:
             print("conv id not found, creating new doc")
-            hist = cls()
+            hist = cls(hist_id)
             hist.save(col, self.state_col)
         return hist
 
@@ -65,6 +65,8 @@ class StateManager:
             raise RuntimeError("Must call set_response before you can call next_round again")
         conv_state = state.ConvState(question)
         user_state = self.user_history.state
+        if not user_state:
+            user_state = UserState()
         conv_state.run_extractors(self.conv_history)
         user_state.run_extractors(self.user_history, self.conv_history)
         self.has_response = False
