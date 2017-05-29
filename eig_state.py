@@ -57,6 +57,8 @@ class State:
             else:
                 raise TypeError("extractor must be either list of extractors, or a string extractor type.")
 
+            #TODO this is a shitty way of doing this, should make it run some
+            #sort of diff on the objects or something
             self.changed = changed
             if history.past_states:
                 if hasattr(self, 'question'):
@@ -79,6 +81,7 @@ class State:
         """
         Saves object to mongo
         """
+        #TODO make it so this only saves if there is a change
         if hasattr(self, '_id'):
             col.replace_one({'_id': self._id}, self.__dict__)
         else:
@@ -281,7 +284,10 @@ class StateManager:
         return self.get_state(_id, UserState)
 
     def next_round(self, question):
-        state = ConvState(question)
-        state.run_extractors(self.conv_history)
+        conv_state = ConvState(question)
+        user_state = self.user_history.state
+        conv_state.run_extractors(self.conv_history)
+        user_state.run_extractors(self.user_history, self.conv_history)
         self.conv_history.save(self.conv_col, self.state_col)
-        return self.conv_history
+        self.user_history.save(self.user_col, self.state_col)
+        return self

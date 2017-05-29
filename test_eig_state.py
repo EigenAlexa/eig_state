@@ -216,8 +216,11 @@ class TestStateManager(unittest.TestCase):
         question = "Who are you?"
         self.sm.next_round(question)
         conv_history = self.sm.get_conv_history(self.sm.conv_history.convid)
+        user_history = self.sm.get_user_history(self.sm.user_history.userid)
         self.assertEqual(conv_history.state.question, question)
         self.assertIsInstance(conv_history.past_states[0], ConvState)
         self.assertEqual(conv_history.past_states[0].question,
                          self.test_state['question'])
+
+        self.assertIsInstance(user_history.past_states[0], UserState)
 
