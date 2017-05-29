@@ -2,7 +2,7 @@ import unittest
 from eig_state import State, History, ConvHistory, ConvState
 from eig_state import StateManager, UserState, UserHistory
 from state_extractors import StateExtractor, UserNameExtractor, NamedEntityExtractor
-from state_extractors import ProfanityDetector
+from state_extractors import ProfanityDetector, AdviceDetector
 from pymongo import MongoClient
 import utils
 
@@ -139,6 +139,29 @@ class TestStateExtractors(unittest.TestCase):
              {'has_swear': True}
             ),
         ]
+        self.conv_extractor_util(test_cases)
+
+    def test_AdviceDetector(self):
+
+        history = ConvHistory()
+        exts = [AdviceDetector()]
+
+        test_cases = [
+            (ConvState("Should I invest in Amazon?", exts),
+             history,
+             {'asks_advice': True}
+            ),
+            (ConvState("Can you give me some stock market advice?", exts),
+             history,
+             {'asks_advice': True}
+            ),
+            #(ConvState("what do you think I should do with my money?", exts),
+            # history,
+            # {'asks_advice': True}
+            #)
+            # implement this feature
+        ]
+
         self.conv_extractor_util(test_cases)
 
     @unittest.skip("Not Implemented")

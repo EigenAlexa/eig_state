@@ -35,6 +35,7 @@ class StateExtractor(metaclass=abc.ABCMeta):
                 extractors.append(ext)
         return extractors
 
+## NOT IMPLEMENTED
 class NamedEntityExtractor(StateExtractor):
 
     def __init__(self):
@@ -57,6 +58,8 @@ class NamedEntityExtractor(StateExtractor):
             state.nes = {}
             return False
 
+
+## NOT IMPLEMENTED
 class UserNameExtractor(StateExtractor):
 
     def __init__(self):
@@ -98,3 +101,17 @@ class ProfanityDetector(StateExtractor):
         has_bad_phrase = any(phrase in text for phrase in phrases)
         return has_swear or has_bad_phrase
 
+class AdviceDetector(StateExtractor):
+
+    @property
+    def type(self):
+        return "conv"
+
+    @property
+    def state_var_names(self):
+        return ['asks_advice']
+
+    def __call__(self, state, history):
+        state.asks_advice = "should i" in state.question.lower() \
+                or "advice" in state.question.lower()
+        return True
