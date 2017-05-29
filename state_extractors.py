@@ -112,6 +112,6 @@ class AdviceDetector(StateExtractor):
         return ['asks_advice']
 
     def __call__(self, state, history):
-        state.asks_advice = "should i" in state.question.lower() \
-                or "advice" in state.question.lower()
+        state.asks_advice = "should i" in state.question.lower()
+        state.asks_advice |= "advice" in state.question.lower()
         return True

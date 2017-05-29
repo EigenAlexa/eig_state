@@ -163,6 +163,7 @@ class StateManager:
         self.user_col = self.db.users
         self.conv_history = self.get_conv_history(convid)
         self.user_history = self.get_user_history(userid)
+        self.has_response = True
 
     def get_conv_history(self, convid):
         """
@@ -211,10 +212,20 @@ class StateManager:
         return self.get_state(_id, UserState)
 
     def next_round(self, question):
+        if not self.has_response:
+            raise RuntimeError("Must call set_response before you can call next_round again")
         conv_state = ConvState(question)
         user_state = self.user_history.state
         conv_state.run_extractors(self.conv_history)
         user_state.run_extractors(self.user_history, self.conv_history)
+        self.has_response = False
+        return self
+
+    def set_response(self, response):
+        if self.has_response:
+            raise RuntimeError("Must call next_round before you can call set_response again.")
+        self.conv_history.last_response = response
         self.conv_history.save(self.conv_col, self.state_col)
         self.user_history.save(self.user_col, self.state_col)
-        return self
+        self.has_response = True
+

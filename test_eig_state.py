@@ -261,15 +261,18 @@ class TestStateManager(unittest.TestCase):
         utils.test_runs_conv_extractors(self, self.sm.conv_history.state)
         utils.test_runs_user_extractors(self, self.sm.user_history.state)
 
-    def test_next_round_saves_history(self):
+    def test_set_response_saves_history(self):
         question = "Who are you?"
+        res = "eigen"
         self.sm.next_round(question)
+        self.sm.set_response(res)
         conv_history = self.sm.get_conv_history(self.sm.conv_history.convid)
         user_history = self.sm.get_user_history(self.sm.user_history.userid)
         self.assertEqual(conv_history.state.question, question)
         self.assertIsInstance(conv_history.past_states[0], ConvState)
         self.assertEqual(conv_history.past_states[0].question,
                          self.test_state['question'])
+        self.assertEqual(conv_history.last_response, res)
 
         self.assertIsInstance(user_history.past_states[0], UserState)
 
