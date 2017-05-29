@@ -1,23 +1,26 @@
 import unittest
-from eig_state import State, History, ConvHistory, ConvState
-from eig_state import StateManager, UserState, UserHistory
-from state_extractors import StateExtractor, UserNameExtractor, NamedEntityExtractor
-from state_extractors import ProfanityDetector, AdviceDetector
+
+from eig_state import state as s
+from eig_state import history as h
+from eig_state import state_extractors as se
+from eig_state import state_manager
+from eig_state.tests import utils
+
 from pymongo import MongoClient
-import utils
+
 
 
 class TestConvHistory(unittest.TestCase):
 
     def setUp(self):
-        self.history = ConvHistory()
+        self.history = h.ConvHistory()
 
     def tearDown(self):
         del self.history
 
     def test_update(self):
         test_text = "This is a test."
-        test_state = ConvState(test_text, extractors=[])
+        test_state = s.ConvState(test_text, extractors=[])
         self.history.update(test_state)
         self.assertEqual(self.history.state, test_state)
         self.assertEqual(self.history.past_states, [])
@@ -26,7 +29,7 @@ class TestConvHistory(unittest.TestCase):
         self.assertEqual(self.history.current_turn[0], test_text)
 
         test_text_2 = "This is a second test."
-        new_state = ConvState(test_text_2, extractors=[])
+        new_state = s.ConvState(test_text_2, extractors=[])
         new_state.run_extractors(self.history)
         self.assertEqual(self.history.state, new_state)
         self.assertEqual(self.history.past_states[-1], test_state)
@@ -35,7 +38,7 @@ class TestConvHistory(unittest.TestCase):
 
     def test_add_response(self):
         test_text = "This is a test."
-        test_state = ConvState(test_text, extractors=[])
+        test_state = s.ConvState(test_text, extractors=[])
         self.history.update(test_state)
         response = "Hi There!"
         self.history.last_response = response
@@ -47,29 +50,29 @@ class TestConvHistory(unittest.TestCase):
 class TestConvState(unittest.TestCase):
 
     def setUp(self):
-        self.history = ConvHistory()
+        self.history = h.ConvHistory()
 
     def test_runs_conv_extractors(self):
         test_text = "This is a test!"
-        test_state = ConvState(test_text, extractors="conv")
+        test_state = s.ConvState(test_text, extractors="conv")
         test_state.run_extractors(self.history)
         utils.test_runs_conv_extractors(self, test_state)
 
     def test_runs_user_extractors(self):
-        test_state = UserState()
-        test_state.run_extractors(UserHistory(), self.history)
+        test_state = s.UserState()
+        test_state.run_extractors(h.UserHistory(), self.history)
         utils.test_runs_user_extractors(self, test_state)
 
     def test_updates_history(self):
         test_text = "This is a test!"
-        test_state = ConvState(test_text, extractors=[])
+        test_state = s.ConvState(test_text, extractors=[])
         test_state.run_extractors(self.history)
         self.assertEqual(self.history.last_question, test_text)
         self.assertEqual(self.history.state, test_state)
 
     def test_bad_history_input(self):
         test_text = "This is a test!"
-        state = ConvState(test_text, extractors=[])
+        state = s.ConvState(test_text, extractors=[])
         self.assertRaises(TypeError, state.run_extractors, history=123)
 
 class TestStateExtractors(unittest.TestCase):
@@ -91,11 +94,11 @@ class TestStateExtractors(unittest.TestCase):
     @unittest.skip("Not Implemented")
     def test_NamedEntityExtractor(self):
 
-        history = ConvHistory()
-        exts = [NamedEntityExtractor()]
+        history = h.ConvHistory()
+        exts = [se.NamedEntityExtractor()]
 
         test_cases = [
-            (ConvState("James is at WeWork.", exts),
+            (s.ConvState("James is at WeWork.", exts),
              history,
              {'nes': [
                         { 'name': 'WeWork', 'type': 'place' },
@@ -103,7 +106,7 @@ class TestStateExtractors(unittest.TestCase):
                      ]
              }
             ),
-            (ConvState("Phillip is in Irvine.", exts),
+            (s.ConvState("Phillip is in Irvine.", exts),
              history,
              {'nes': [
                         { 'name': 'Irvine', 'type': 'place' },
@@ -118,23 +121,23 @@ class TestStateExtractors(unittest.TestCase):
 
     def test_ProfanityDetector(self):
 
-        history = ConvHistory()
-        exts = [ProfanityDetector()]
+        history = h.ConvHistory()
+        exts = [se.ProfanityDetector()]
 
         test_cases = [
-            (ConvState("Fuck you.", exts),
+            (s.ConvState("Fuck you.", exts),
              history,
              {'has_swear': True}
             ),
-            (ConvState("you are class", exts),
+            (s.ConvState("you are class", exts),
              history,
              {'has_swear': False}
             ),
-            (ConvState("you are an ass.", exts),
+            (s.ConvState("you are an ass.", exts),
              history,
              {'has_swear': True}
             ),
-            (ConvState("fucker", exts),
+            (s.ConvState("fucker", exts),
              history,
              {'has_swear': True}
             ),
@@ -143,19 +146,19 @@ class TestStateExtractors(unittest.TestCase):
 
     def test_AdviceDetector(self):
 
-        history = ConvHistory()
-        exts = [AdviceDetector()]
+        history = h.ConvHistory()
+        exts = [se.AdviceDetector()]
 
         test_cases = [
-            (ConvState("Should I invest in Amazon?", exts),
+            (s.ConvState("Should I invest in Amazon?", exts),
              history,
              {'asks_advice': True}
             ),
-            (ConvState("Can you give me some stock market advice?", exts),
+            (s.ConvState("Can you give me some stock market advice?", exts),
              history,
              {'asks_advice': True}
             ),
-            #(ConvState("what do you think I should do with my money?", exts),
+            #(s.ConvState("what do you think I should do with my money?", exts),
             # history,
             # {'asks_advice': True}
             #)
@@ -167,14 +170,14 @@ class TestStateExtractors(unittest.TestCase):
     @unittest.skip("Not Implemented")
     def test_UserNameExtractor(self):
 
-        user_hist = UserHistory()
-        conv_hist = ConvHistory()
-        user_exts = [UserNameExtractor()]
+        user_hist = h.UserHistory()
+        conv_hist = h.ConvHistory()
+        user_exts = [se.UserNameExtractor()]
         conv_exts = []
 
         test_cases = [
-            (UserState(user_exts), user_hist,
-             ConvState("My name is James", conv_exts),
+            (s.UserState(user_exts), user_hist,
+             s.ConvState("My name is James", conv_exts),
              conv_hist,
              {'name':'James'}
             )
@@ -186,7 +189,7 @@ class TestStateExtractors(unittest.TestCase):
 class TestStateManager(unittest.TestCase):
 
     def setUp(self):
-        sm = StateManager("", "", database="test")
+        sm = state_manager.StateManager("", "", database="test")
         self.test_state = {'question': 'What is your name?'}
         self.test_user_state = {'name': 'James'}
         conv_result = sm.state_col.insert_one(self.test_state)
@@ -211,7 +214,7 @@ class TestStateManager(unittest.TestCase):
                          }
         result = sm.user_col.insert_one(self.test_user)
         self.assertTrue(result.acknowledged)
-        self.sm = StateManager("userid", "convid", database="test")
+        self.sm = state_manager.StateManager("userid", "convid", database="test")
 
     def tearDown(self):
         self.sm.mongo_client.drop_database('test')
@@ -229,26 +232,26 @@ class TestStateManager(unittest.TestCase):
 
     def test_get_conv_history(self):
         conv_history = self.sm.get_conv_history(self.test_conv['convid'])
-        self.assertIsInstance(conv_history, ConvHistory)
+        self.assertIsInstance(conv_history, h.ConvHistory)
         for key, value in self.test_conv.items():
             if key != 'state':
                 self.assertEqual(value, getattr(conv_history, key))
             else:
                 state = getattr(conv_history, key)
-                self.assertIsInstance(state, ConvState)
+                self.assertIsInstance(state, s.ConvState)
                 for k, v in self.test_state.items():
                     print(k)
                     self.assertEqual(getattr(state, k), v)
 
     def test_get_user_history(self):
         user_history = self.sm.get_user_history(self.test_user['userid'])
-        self.assertIsInstance(user_history, UserHistory)
+        self.assertIsInstance(user_history, h.UserHistory)
         for key, value in self.test_user.items():
             if key != 'state':
                 self.assertEqual(value, getattr(user_history, key))
             else:
                 state = getattr(user_history, key)
-                self.assertIsInstance(state, UserState)
+                self.assertIsInstance(state, s.UserState)
                 for k, v in self.test_user_state.items():
                     self.assertEqual(getattr(state, k), v)
 
@@ -256,7 +259,7 @@ class TestStateManager(unittest.TestCase):
         question = "Who are you?"
         self.sm.next_round(question)
         self.assertNotEqual(self.sm.conv_history.state, self.test_state)
-        self.assertIsInstance(self.sm.conv_history.past_states[0], ConvState)
+        self.assertIsInstance(self.sm.conv_history.past_states[0], s.ConvState)
         self.assertEqual(self.sm.conv_history.state.question, question)
         utils.test_runs_conv_extractors(self, self.sm.conv_history.state)
         utils.test_runs_user_extractors(self, self.sm.user_history.state)
@@ -269,10 +272,10 @@ class TestStateManager(unittest.TestCase):
         conv_history = self.sm.get_conv_history(self.sm.conv_history.convid)
         user_history = self.sm.get_user_history(self.sm.user_history.userid)
         self.assertEqual(conv_history.state.question, question)
-        self.assertIsInstance(conv_history.past_states[0], ConvState)
+        self.assertIsInstance(conv_history.past_states[0], s.ConvState)
         self.assertEqual(conv_history.past_states[0].question,
                          self.test_state['question'])
         self.assertEqual(conv_history.last_response, res)
 
-        self.assertIsInstance(user_history.past_states[0], UserState)
+        self.assertIsInstance(user_history.past_states[0], s.UserState)
 

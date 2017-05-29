@@ -1,6 +1,6 @@
 import abc
-from swear_words import words as swears
-from swear_words import phrases
+from eig_state.swear_words import words as swears
+from eig_state.swear_words import phrases
 import re
 
 
