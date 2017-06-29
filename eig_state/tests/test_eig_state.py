@@ -6,51 +6,122 @@ from eig_state import state_extractors as se
 from eig_state import state_manager
 from eig_state.tests import utils
 
-from pymongo import MongoClient
+import boto3
+from moto import mock_dynamodb2
+
+def create_tables(dynamo):
+    dynamo.create_table(
+        AttributeDefinitions=[
+            {
+                'AttributeName': 'id',
+                'AttributeType': 'S',
+            }
+        ],
+        KeySchema=[
+            {
+                'AttributeName':'id',
+                'KeyType': 'HASH'
+            }
+        ],
+        ProvisionedThroughput={
+            'ReadCapacityUnits': 5,
+            'WriteCapacityUnits': 5
+        },
+        TableName='test_conversations'
+    )
+    dynamo.create_table(
+        AttributeDefinitions=[
+            {
+                'AttributeName': 'id',
+                'AttributeType': 'S',
+            }
+        ],
+        KeySchema=[
+            {
+                'AttributeName':'id',
+                'KeyType': 'HASH'
+            }
+        ],
+        ProvisionedThroughput={
+            'ReadCapacityUnits': 5,
+            'WriteCapacityUnits': 5
+        },
+        TableName='test_states'
+    )
+    dynamo.create_table(
+        AttributeDefinitions=[
+            {
+                'AttributeName': 'id',
+                'AttributeType': 'S',
+            }
+        ],
+        KeySchema=[
+            {
+                'AttributeName':'id',
+                'KeyType': 'HASH'
+            }
+        ],
+        ProvisionedThroughput={
+            'ReadCapacityUnits': 5,
+            'WriteCapacityUnits': 5
+        },
+        TableName='test_users'
+    )
+
+def setUpDynamo(cls):
+   cls.dynamo = boto3.resource('dynamodb', region_name='us-east-1')
+   #create_tables(cls.dynamo)
+   cls.state_tbl = cls.dynamo.Table('test_states')
+   cls.conv_tbl = cls.dynamo.Table('test_conversations')
 
 
 
 class TestConvHistory(unittest.TestCase):
 
-    def setUp(self):
-        self.history = h.ConvHistory()
+    @classmethod
+    def setUpClass(cls):
+        setUpDynamo(cls)
 
-    def tearDown(self):
-        del self.history
+    def setUp(self):
+        self.history = h.ConvHistory("sessionid", self.state_tbl, "convid",
+                                     "userid")
 
     def test_update(self):
         test_text = "This is a test."
         test_state = s.ConvState(test_text, extractors=[])
+        test_state.changed = True
         self.history.update(test_state)
-        self.assertEqual(self.history.state, test_state)
-        self.assertEqual(self.history.past_states, [])
-        self.assertEqual(self.history.past_turns, [])
-        self.assertIsInstance(self.history.current_turn, tuple)
-        self.assertEqual(self.history.current_turn[0], test_text)
+        self.assertEqual(self.history.state_list[-1], test_state)
 
         test_text_2 = "This is a second test."
         new_state = s.ConvState(test_text_2, extractors=[])
         new_state.run_extractors(self.history)
-        self.assertEqual(self.history.state, new_state)
-        self.assertEqual(self.history.past_states[-1], test_state)
-        self.assertEqual(self.history.past_turns[-1], (test_text, None))
-        self.assertEqual(self.history.current_turn[0], test_text_2)
+        self.assertEqual(self.history.state_list[-1], new_state)
+        self.assertEqual(self.history.state_list[-2], test_state)
+        self.assertEqual(self.history.state_list[-2].question, test_text)
+        self.assertEqual(self.history.state_list[-1].question, test_text_2)
 
     def test_add_response(self):
         test_text = "This is a test."
         test_state = s.ConvState(test_text, extractors=[])
+        test_state.changed = True
         self.history.update(test_state)
         response = "Hi There!"
-        self.history.last_response = response
+        self.history.set_last_response(response)
 
-        self.assertEqual(self.history.current_turn[1], response)
+        self.assertEqual(self.history.state_list[-1].response, response)
 
 
 
 class TestConvState(unittest.TestCase):
 
+    @classmethod
+    def setUpClass(cls):
+        setUpDynamo(cls)
+
     def setUp(self):
-        self.history = h.ConvHistory()
+        self.history = h.ConvHistory("sessionid", self.state_tbl, "convid",
+                                     "userid")
 
     def test_runs_conv_extractors(self):
         test_text = "This is a test!"
@@ -60,15 +131,15 @@ class TestConvState(unittest.TestCase):
 
     def test_runs_user_extractors(self):
         test_state = s.UserState()
-        test_state.run_extractors(h.UserHistory(), self.history)
+        test_state.run_extractors(h.UserHistory("userid", self.state_tbl), self.history)
         utils.test_runs_user_extractors(self, test_state)
 
     def test_updates_history(self):
         test_text = "This is a test!"
         test_state = s.ConvState(test_text, extractors=[])
         test_state.run_extractors(self.history)
-        self.assertEqual(self.history.last_question, test_text)
-        self.assertEqual(self.history.state, test_state)
+        self.assertEqual(self.history.state_list[-1].question, test_text)
+        self.assertEqual(self.history.state_list[-1], test_state)
 
     def test_bad_history_input(self):
         test_text = "This is a test!"
@@ -77,6 +148,10 @@ class TestConvState(unittest.TestCase):
 
 class TestStateExtractors(unittest.TestCase):
 
+
+    @classmethod
+    def setUpClass(cls):
+        setUpDynamo(cls)
 
     def conv_extractor_util(self, test_cases):
         for state, history, output in test_cases:
@@ -94,7 +169,11 @@ class TestStateExtractors(unittest.TestCase):
     @unittest.skip("Not Implemented")
     def test_NamedEntityExtractor(self):
 
-        history = h.ConvHistory()
+        history = h.ConvHistory("sessionid",
+                                self.state_tbl,
+                                "convid",
+                                "userid")
+
         exts = [se.NamedEntityExtractor()]
 
         test_cases = [
@@ -121,7 +200,11 @@ class TestStateExtractors(unittest.TestCase):
 
     def test_ProfanityDetector(self):
 
-        history = h.ConvHistory()
+        history = h.ConvHistory("sessionid",
+                                self.state_tbl,
+                                "convid",
+                                "userid")
+
         exts = [se.ProfanityDetector()]
 
         test_cases = [
@@ -146,7 +229,10 @@ class TestStateExtractors(unittest.TestCase):
 
     def test_AdviceDetector(self):
 
-        history = h.ConvHistory()
+        history = h.ConvHistory("sessionid",
+                                self.state_tbl,
+                                "convid",
+                                "userid")
         exts = [se.AdviceDetector()]
 
         test_cases = [
@@ -170,8 +256,12 @@ class TestStateExtractors(unittest.TestCase):
     @unittest.skip("Not Implemented")
     def test_UserNameExtractor(self):
 
-        user_hist = h.UserHistory()
-        conv_hist = h.ConvHistory()
+        user_hist = h.UserHistory("sessionid",
+                                  self.state_tbl)
+        conv_hist = h.ConvHistory("sessionid",
+                                  self.state_tbl,
+                                  "convid",
+                                  "userid")
         user_exts = [se.UserNameExtractor()]
         conv_exts = []
 
@@ -188,94 +278,65 @@ class TestStateExtractors(unittest.TestCase):
 
 class TestStateManager(unittest.TestCase):
 
+    @classmethod
+    def setUpClass(cls):
+        setUpDynamo(cls)
+
     def setUp(self):
-        sm = state_manager.StateManager("", "", database="test")
-        self.test_state = {'question': 'What is your name?'}
-        self.test_user_state = {'name': 'James'}
-        conv_result = sm.state_col.insert_one(self.test_state)
-        self.assertTrue(conv_result.acknowledged)
-        user_result = sm.state_col.insert_one(self.test_user_state)
-        self.assertTrue(user_result.acknowledged)
-        self.test_state['_id'] = conv_result.inserted_id
-        self.test_user_state['_id'] = user_result.inserted_id
-        self.test_conv = {'convid': 'convid',
-                     'last_response': 'James',
-                     'last_question': 'What is your name?',
-                     'state': conv_result.inserted_id,
-                     'past_states': [],
-                     'userid': "userid",
-                     'past_turns': [("Who are you?", "I am James")]
-                    }
-        result = sm.conv_col.insert_one(self.test_conv)
-        self.assertTrue(result.acknowledged)
-        self.test_user = {'userid': 'userid',
-                          'state': user_result.inserted_id,
-                          'past_states': []
-                         }
-        result = sm.user_col.insert_one(self.test_user)
-        self.assertTrue(result.acknowledged)
-        self.sm = state_manager.StateManager("userid", "convid", database="test")
+        self.sm = state_manager.StateManager("userid", "convid", "sessionid",
+                                        state_tbl_name='test_states',
+                                        user_tbl_name='test_users',
+                                        conv_tbl_name='test_conversations')
+        self.test_q = "hello"
+        self.test_res  = "hi there"
+        self.sm.next_round(self.test_q)
+        self.sm.set_response(self.test_res)
 
-    def tearDown(self):
-        self.sm.mongo_client.drop_database('test')
+    def test_sm_connects_to_dynamo(self):
+        self.assertIsInstance(self.sm.dynamo,
+                              boto3.resources.base.ServiceResource)
+        self.assertEqual(self.sm.dynamo.meta.service_name, 'dynamodb')
 
-    def test_sm_connects_to_mongo(self):
-        self.assertIsInstance(self.sm.mongo_client, MongoClient)
-        self.assertTrue(self.sm.mongo_client.is_primary)
-
-    def test_sm_can_write_to_mongo(self):
-        test_doc = {'test_field':'test'}
-        result = self.sm.db.test_col.insert_one(test_doc)
-        self.assertTrue(result.acknowledged)
-        doc = self.sm.db.test_col.find_one(result.inserted_id)
-        self.assertEqual(doc, test_doc)
+    def test_sm_can_write_to_dynamo(self):
+        test_item = {'id': '1', 'test_field':'test'}
+        tbl = self.sm.get_table(self.sm.conv_tbl_name)
+        response = tbl.put_item(Item=test_item)
+        item = self.sm.retrieve_item(self.sm.conv_tbl_name, '1')
+        self.assertEqual(item, test_item)
 
     def test_get_conv_history(self):
-        conv_history = self.sm.get_conv_history(self.test_conv['convid'])
+        conv_history = self.sm.get_conv_history("sessionid", "convid", "userid")
         self.assertIsInstance(conv_history, h.ConvHistory)
-        for key, value in self.test_conv.items():
-            if key != 'state':
-                self.assertEqual(value, getattr(conv_history, key))
-            else:
-                state = getattr(conv_history, key)
-                self.assertIsInstance(state, s.ConvState)
-                for k, v in self.test_state.items():
-                    print(k)
-                    self.assertEqual(getattr(state, k), v)
+        self.assertEqual(conv_history.state_list[-1].question, self.test_q)
+        self.assertEqual(conv_history.state_list[-1].response, self.test_res)
 
     def test_get_user_history(self):
-        user_history = self.sm.get_user_history(self.test_user['userid'])
+        user_history = self.sm.get_user_history("userid")
         self.assertIsInstance(user_history, h.UserHistory)
-        for key, value in self.test_user.items():
-            if key != 'state':
-                self.assertEqual(value, getattr(user_history, key))
-            else:
-                state = getattr(user_history, key)
-                self.assertIsInstance(state, s.UserState)
-                for k, v in self.test_user_state.items():
-                    self.assertEqual(getattr(state, k), v)
 
     def test_next_round_updates_history(self):
         question = "Who are you?"
         self.sm.next_round(question)
-        self.assertNotEqual(self.sm.conv_history.state, self.test_state)
-        self.assertIsInstance(self.sm.conv_history.past_states[0], s.ConvState)
-        self.assertEqual(self.sm.conv_history.state.question, question)
-        utils.test_runs_conv_extractors(self, self.sm.conv_history.state)
-        utils.test_runs_user_extractors(self, self.sm.user_history.state)
+        self.assertIsInstance(self.sm.conv_history.state_list[-2], s.ConvState)
+        self.assertEqual(self.sm.conv_history.state_list[-1].question, question)
+        utils.test_runs_conv_extractors(self,
+                                        self.sm.conv_history.state_list[-1])
+        utils.test_runs_user_extractors(self,
+                                        self.sm.user_history.state_list[-1])
 
     def test_set_response_saves_history(self):
         question = "Who are you?"
         res = "eigen"
         self.sm.next_round(question)
         self.sm.set_response(res)
-        conv_history = self.sm.get_conv_history(self.sm.conv_history.convid)
-        user_history = self.sm.get_user_history(self.sm.user_history.userid)
-        self.assertEqual(conv_history.state.question, question)
-        self.assertIsInstance(conv_history.past_states[0], s.ConvState)
-        self.assertEqual(conv_history.past_states[0].question,
-                         self.test_state['question'])
-        self.assertEqual(conv_history.last_response, res)
+        conv_history = self.sm.get_conv_history("sessionid", "convid", "userid")
+        user_history = self.sm.get_user_history("userid")
+        self.assertEqual(conv_history.state_list[-1].question, question)
+        self.assertEqual(conv_history.state_list[-1].response, res)
+        self.assertIsInstance(conv_history.state_list[-2], s.ConvState)
+        self.assertEqual(conv_history.state_list[-2].question,
+                         self.test_q)
+        self.assertEqual(conv_history.state_list[-2].response, self.test_res)
 
-        self.assertIsInstance(user_history.past_states[0], s.UserState)
+        self.assertIsInstance(user_history.state_list[-2], s.UserState)
 

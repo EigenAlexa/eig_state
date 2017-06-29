@@ -13,3 +13,4 @@ def test_runs_extractors(test_case, test_state, extractor_type):
             test_case.assertTrue(hasattr(test_state, name),
                                  msg="Extractor {} missing state var {}"
                                  .format(extractor.__class__.__name__, name))
+            test_case.assertTrue(name in test_state.savers)

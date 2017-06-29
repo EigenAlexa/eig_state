@@ -35,6 +35,10 @@ class StateExtractor(metaclass=abc.ABCMeta):
                 extractors.append(ext)
         return extractors
 
+    def __call__(self, state, history):
+        for var in self.state_var_names:
+            state.register_saver(var)
+
 ## NOT IMPLEMENTED
 class NamedEntityExtractor(StateExtractor):
 
@@ -51,8 +55,9 @@ class NamedEntityExtractor(StateExtractor):
         return ["nes"]
 
     def __call__(self, state, history):
-        if history.past_states:
-            state.nes = history.past_states[-1].nes
+        super().__call__(state, history)
+        if history.state_list:
+            state.nes = history.state_list[-1].nes
             return True
         else:
             state.nes = {}
@@ -74,8 +79,9 @@ class UserNameExtractor(StateExtractor):
         return ["name"]
 
     def __call__(self, state, user_hist, conv_history):
-        if user_hist.past_states:
-            state.name = user_hist.past_states[-1].name
+        super().__call__(state, user_hist)
+        if user_hist.state_list:
+            state.name = user_hist.state_list[-1].name
             return True
         else:
             state.name = "UserName"
@@ -92,6 +98,7 @@ class ProfanityDetector(StateExtractor):
         return ['has_swear']
 
     def __call__(self, state, history):
+        super().__call__(state, history)
         state.has_swear = self.contains_profanity(state.question)
         return True
 
@@ -112,6 +119,7 @@ class AdviceDetector(StateExtractor):
         return ['asks_advice']
 
     def __call__(self, state, history):
+        super().__call__(state, history)
         state.asks_advice = "should i" in state.question.lower()
         state.asks_advice |= "advice" in state.question.lower()
         return True
