@@ -41,4 +41,3 @@ class UserHistory(History):
     def __init__(self, _id, state_tbl, **kwargs):
         super().__init__(_id, state_tbl, eig_state.state.UserState, **kwargs)
 
-
