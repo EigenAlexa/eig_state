@@ -1,3 +1,4 @@
+import sys
 import eig_state
 from eig_state.core import DynamoBackedObject
 
@@ -9,6 +10,7 @@ class History(DynamoBackedObject):
         #TODO make past_states lazily evaluated so they only get brought into
         #memory if they are called on
         self.state_tbl = state_tbl
+        print(self.state_list_saver)
         self.register_saver('state_list_id', self.state_list_saver)
 
     def update(self, state):
@@ -29,8 +31,10 @@ class ConvHistory(History):
         super().__init__(_id, state_tbl, eig_state.state.ConvState, **kwargs)
         self.userid = userid
         self.register_saver('userid')
-        self.convid = convid
-        self.register_saver('convid')
+        print(convid)
+        if convid != "None":
+            self.convid = convid
+            self.register_saver('convid')
 
     def set_last_response(self, response):
         self.state_list[-1].response = response

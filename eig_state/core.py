@@ -31,8 +31,10 @@ class DynamoBackedObject:
         Saves this to dynamodb
         """
         item = {}
+        print(self.savers.items())
         for var_name, saver in self.savers.items():
             if saver:
+                print("Saver: ", saver)
                 item = saver(item)
             else:
                 item[var_name] = getattr(self, var_name)

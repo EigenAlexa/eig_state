@@ -43,7 +43,7 @@ class StateList(DynamoBackedObject, collections.abc.MutableSequence):
         DynamoBackedObject.__init__(self, _id)
         self.states = {}
         self.state_ids = []
-        self.register_saver('states', self.state_saver)
+        self.register_saver('state_ids', self.state_saver)
         self.tbl = table
         self.state_cls = state_cls
 
